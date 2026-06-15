@@ -46,9 +46,9 @@ const fmt = (n) => (Math.round(n * 100) / 100).toString();
 const qtyLabel = (qty, unit) => `${fmt(qty)} ${unit}`;
 
 /* ---------- cadence (groceries only) ---------- */
-const CADENCE = ["W", "2W", "M"];
-const CADENCE_LABEL = { W: "Weekly", "2W": "Bi-weekly", M: "Monthly" };
-const INTERVAL = { W: 7, "2W": 14, M: 30 }; // days between restocks
+const CADENCE = ["D", "W", "2W", "M"];
+const CADENCE_LABEL: Record<string,string> = { D: "Daily", W: "Weekly", "2W": "Bi-weekly", M: "Monthly" };
+const INTERVAL: Record<string,number> = { D: 1, W: 7, "2W": 14, M: 30 };
 const CAT_CADENCE = {
   dairy: "W", bakery: "W", snacks: "2W",
   grains: "M", dals: "M", masala: "M", oils: "M", dryfruits: "M",
@@ -224,6 +224,8 @@ export default function PantryApp() {
   const [contacts, setContacts] = useState<any[]>([]);
   const [contactId, setContactId] = useState<any>(null);
   const [familyMenu, setFamilyMenu] = useState(false);
+  const [customItems, setCustomItems] = useState<any[]>([]); // [{id,name,mode,cat,units}]
+  const [addPanel, setAddPanel] = useState(false);
   // auth + family (Supabase)
   const [session, setSession] = useState<any>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -259,10 +261,12 @@ export default function PantryApp() {
   /* ---- contacts (personal, on-device) ---- */
   useEffect(() => {
     try { const r = localStorage.getItem("pantry:contacts"); if (r) { const d = JSON.parse(r); setContacts(d.contacts || []); setContactId(d.contactId || null); } } catch (e) {}
+    try { const r2 = localStorage.getItem("pantry:custom"); if (r2) setCustomItems(JSON.parse(r2)); } catch (e) {}
   }, []);
   useEffect(() => {
     try { localStorage.setItem("pantry:contacts", JSON.stringify({ contacts, contactId })); } catch (e) {}
-  }, [contacts, contactId]);
+    try { localStorage.setItem("pantry:custom", JSON.stringify(customItems)); } catch (e) {}
+  }, [contacts, contactId, customItems]);
 
   /* ---- auth ---- */
   useEffect(() => {
@@ -417,6 +421,20 @@ export default function PantryApp() {
     ping(mode === "v" ? "Vegetable list cleared" : "Grocery list cleared");
   };
 
+  const addCustomItem = (name: string, catId: string) => {
+    const trimmed = name.trim(); if (!trimmed) return;
+    const m = mode;
+    const id = `custom__${slug(trimmed)}_${Date.now()}`;
+    const cat = m === "g" ? (catId || "grains") : (catId || "veg");
+    const catLabel = m === "g" ? (GROCERIES.find(c=>c.id===cat)?.label || "Other") : (cat === "fruit" ? "Fruits" : "Vegetables");
+    const item = { id, name: trimmed, sub: "", units: ["kg","g","pcs","L","packet"], mode: m, cat, catLabel, defCad: "M", custom: true };
+    ALL_ITEMS[id] = item;
+    setCustomItems(ci => [...ci, item]);
+    toggle(item);
+    setAddPanel(false);
+    ping(`"${trimmed}" added`);
+  };
+
   /* ---- contacts + WhatsApp ---- */
   const normNum = (n) => {
     const d = (n || "").replace(/\D/g, "");
@@ -476,9 +494,13 @@ export default function PantryApp() {
   };
 
   /* ---- derived lists ---- */
-  const source = mode === "g" ? GROCERIES : [
+  // merge custom items into the source
+  const customForMode = customItems.filter(ci => ci.mode === mode);
+  const customCat = customForMode.length ? [{ id: "custom", label: "Custom", icon: "✏️", items: customForMode }] : [];
+  const source = mode === "g" ? [...GROCERIES, ...customCat] : [
     { id: "veg", label: "Vegetables", icon: "🥬", items: VEG },
     { id: "fruit", label: "Fruits", icon: "🍎", items: FRUITS },
+    ...customCat,
   ];
   const q = query.trim().toLowerCase();
   const cadOf = (it) => cad[it.id] || it.defCad || "M";
@@ -563,10 +585,8 @@ export default function PantryApp() {
     const order: Record<string, number> = { veg: 0, fruit: 1 };
     const sorted: [string, any][] = [...selThisMode].sort((a: any, b: any) => (order[ALL_ITEMS[a[0]].cat] ?? 0) - (order[ALL_ITEMS[b[0]].cat] ?? 0));
     const lines = sorted.map(([id, v]: [string, any]) => `• ${ALL_ITEMS[id].name} — ${qtyLabel((v as any).qty, (v as any).unit)}`);
-    const hasFruit = selThisMode.some(([id]) => ALL_ITEMS[id].cat === "fruit");
-    const hasVeg = selThisMode.some(([id]) => ALL_ITEMS[id].cat === "veg");
-    const head = hasFruit && !hasVeg ? "Aaj ke fruits:" : hasFruit && hasVeg ? "Aaj ki sabzi & fruits:" : "Aaj ki sabzi:";
-    return `Namaste 🙏 ${head}\n\n${lines.join("\n")}\n\nDhanyavaad!`;
+    const today = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+    return `Order for ${today}\n\n${lines.join("\n")}`;
   };
   const groceryText = () => {
     const byCat: Record<string, string[]> = {};
@@ -625,8 +645,8 @@ export default function PantryApp() {
         </header>
 
         {/* Search */}
-        <div style={{ padding: "8px 20px 0" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: "11px 14px" }}>
+        <div style={{ padding: "8px 20px 0", display: "flex", gap: 10, alignItems: "center" }}>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: "11px 14px" }}>
             <Search size={17} color={C.faint} />
             <input
               value={query} onChange={(e) => setQuery(e.target.value)}
@@ -635,6 +655,9 @@ export default function PantryApp() {
             />
             {query && <button aria-label="Clear" onClick={() => setQuery("")} style={iconBtn}><X size={16} color={C.faint} /></button>}
           </div>
+          <button onClick={() => setAddPanel(true)} aria-label="Add custom item" style={{ flexShrink: 0, width: 44, height: 44, borderRadius: 14, background: C.green, border: "none", display: "grid", placeItems: "center" }}>
+            <Plus size={20} color="#fff" />
+          </button>
         </div>
 
         {/* Chips */}
@@ -759,6 +782,11 @@ export default function PantryApp() {
         />
       )}
 
+      {/* Add custom item panel */}
+      {addPanel && (
+        <AddItemPanel mode={mode} onAdd={addCustomItem} onClose={() => setAddPanel(false)} />
+      )}
+
       {/* Family & members */}
       {familyMenu && (
         <FamilyMenu
@@ -788,7 +816,7 @@ function Row({ it, state, fav, first, onToggle, onFav, onStep, onSetQty, onUnit,
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 14px" }}>
         <button onClick={onToggle} aria-label={on ? "Remove" : "Add"} style={{
           width: 24, height: 24, borderRadius: 8, flexShrink: 0, border: on ? "none" : `1.6px solid ${C.line}`,
-          background: on ? C.green : C.surface, display: "grid", placeItems: "center", transition: "all .15s ease",
+          background: on ? C.green : C.surface, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s ease",
         }}>
           {on ? <Check size={15} color="#fff" /> : <Plus size={14} color={C.faint} />}
         </button>
@@ -813,19 +841,19 @@ function Row({ it, state, fav, first, onToggle, onFav, onStep, onSetQty, onUnit,
       {on && (
         <div className="reveal" style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 14px 13px 50px", flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", background: C.surface, border: `1px solid ${C.bubbleLine}`, borderRadius: 11, overflow: "hidden" }}>
-            <button onClick={() => onStep(-1)} aria-label="Less" style={stepBtn}><Minus size={15} color={C.greenDeep} /></button>
+            <button onPointerDown={(e)=>{e.preventDefault();onStep(-1);}} aria-label="Less" style={stepBtn}><Minus size={15} color={C.greenDeep} /></button>
             <input
               value={state.qty} inputMode="decimal"
               onChange={(e) => { const v = parseFloat(e.target.value); onSetQty(isNaN(v) ? 0 : v); }}
               style={{ width: 46, textAlign: "center", border: "none", outline: "none", fontSize: 15, fontWeight: 600, background: "transparent", color: C.ink, fontVariantNumeric: "tabular-nums" }}
             />
-            <button onClick={() => onStep(1)} aria-label="More" style={stepBtn}><Plus size={15} color={C.greenDeep} /></button>
+            <button onPointerDown={(e)=>{e.preventDefault();onStep(1);}} aria-label="More" style={stepBtn}><Plus size={15} color={C.greenDeep} /></button>
           </div>
-          <button onClick={onUnit} style={{ fontSize: 13, fontWeight: 600, color: C.greenDeep, background: C.greenTint2, border: `1px solid ${C.bubbleLine}`, borderRadius: 10, padding: "7px 12px", minWidth: 58 }}>
+          <button onPointerDown={(e)=>{e.preventDefault();onUnit();}} style={{ fontSize: 13, fontWeight: 600, color: C.greenDeep, background: C.greenTint2, border: `1px solid ${C.bubbleLine}`, borderRadius: 10, padding: "7px 12px", minWidth: 58 }}>
             {state.unit}
           </button>
           {cadence && (
-            <button onClick={onCad} aria-label="Change cadence" style={{ fontSize: 12.5, fontWeight: 600, color: C.sub, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, padding: "7px 12px" }}>
+            <button onPointerDown={(e)=>{e.preventDefault();onCad();}} aria-label="Change cadence" style={{ fontSize: 12.5, fontWeight: 600, color: C.sub, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, padding: "7px 12px" }}>
               {CADENCE_LABEL[cadence]}
             </button>
           )}
@@ -996,8 +1024,15 @@ function Sheet({ mode, items, accent, onClose, onRemove, onStep, onUnit, onClear
 /* ---------- Auth + family onboarding ---------- */
 function Splash() {
   return (
-    <div style={{ minHeight: "100dvh", background: C.paper, display: "grid", placeItems: "center" }}>
-      <div style={{ color: C.faint, fontFamily: SERIF, fontSize: 22, letterSpacing: "0.04em" }}>Pantry</div>
+    <div style={{ minHeight: "100dvh", background: C.green, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+      <div style={{ width: 80, height: 80, borderRadius: 24, background: "rgba(255,255,255,0.15)", display: "grid", placeItems: "center" }}>
+        <ShoppingBasket size={40} color="#fff" />
+      </div>
+      <div style={{ color: "#fff", fontFamily: SERIF, fontSize: 32, letterSpacing: "0.04em", fontWeight: 500 }}>Pantry</div>
+      <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 500 }}>Family Kitchen</div>
+      <div style={{ marginTop: 16, width: 32, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
+        <div className="splash-bar" style={{ height: "100%", background: "#fff", borderRadius: 2 }} />
+      </div>
     </div>
   );
 }
@@ -1029,8 +1064,13 @@ function AuthGate({ stage, onGoogle, defaultName, onSaveProfile, onCreate, onJoi
           <p style={{ color: C.sub, fontSize: 15, lineHeight: 1.55, margin: "0 0 22px", maxWidth: 320 }}>
             One shared list for the whole family — groceries, sabzi &amp; fruits, and who added what.
           </p>
-          <button onClick={onGoogle} style={{ ...big, background: C.surface, color: C.ink, border: `1px solid ${C.line}` }}>
-            <span style={{ width: 20, height: 20, borderRadius: 10, background: C.green, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800, fontSize: 12 }}>G</span>
+          <button onClick={onGoogle} style={{ ...big, background: "#fff", color: "#3c4043", border: "1px solid #dadce0", boxShadow: "0 1px 3px rgba(0,0,0,0.08)", fontFamily: "Roboto, sans-serif", fontWeight: 500, letterSpacing: "0.01em" }}>
+            <svg width="20" height="20" viewBox="0 0 48 48" style={{ flexShrink: 0 }}>
+              <path fill="#4285F4" d="M47.5 24.6c0-1.6-.1-3.1-.4-4.6H24v8.7h13.2c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.3 7.3-10.6 7.3-17.3z"/>
+              <path fill="#34A853" d="M24 48c6.5 0 12-2.2 16-5.9l-7.9-6c-2.2 1.5-5 2.3-8.1 2.3-6.2 0-11.5-4.2-13.4-9.9H2.5v6.2C6.5 42.6 14.7 48 24 48z"/>
+              <path fill="#FBBC04" d="M10.6 28.5c-.5-1.5-.8-3.1-.8-4.7s.3-3.2.8-4.7v-6.2H2.5C.9 16.3 0 20 0 24s.9 7.7 2.5 10.7l8.1-6.2z"/>
+              <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.9 2.3 30.4 0 24 0 14.7 0 6.5 5.4 2.5 13.3l8.1 6.2C12.5 13.7 17.8 9.5 24 9.5z"/>
+            </svg>
             Continue with Google
           </button>
         </div>
@@ -1070,7 +1110,7 @@ function AuthGate({ stage, onGoogle, defaultName, onSaveProfile, onCreate, onJoi
           {famMode === "create" && (
             <>
               <label style={{ fontSize: 13, fontWeight: 600, color: C.sub }}>Home name</label>
-              <input autoFocus value={homeName} onChange={(e) => setHomeName(e.target.value)} placeholder="Grover Home" style={{ ...field, margin: "8px 0 16px" }} />
+              <input autoFocus value={homeName} onChange={(e) => setHomeName(e.target.value)} placeholder="e.g. The Grovers, Home, Family" style={{ ...field, margin: "8px 0 16px" }} />
               <button disabled={busy} onClick={async () => { setBusy(true); await onCreate(homeName); setBusy(false); }} style={{ ...big, background: C.green, color: "#fff", opacity: busy ? 0.6 : 1 }}>{busy ? "Creating…" : "Create & get code"}</button>
               <button onClick={() => setFamMode(null)} style={{ ...big, background: "transparent", color: C.sub, marginTop: 6 }}>Back</button>
             </>
@@ -1141,6 +1181,49 @@ function FamilyMenu({ familyName, familyCode, members, meId, onClose, onInvite, 
   );
 }
 
+
+/* ---------- Add custom item panel ---------- */
+function AddItemPanel({ mode, onAdd, onClose }: any) {
+  const [name, setName] = useState("");
+  const [cat, setCat] = useState(mode === "g" ? "grains" : "veg");
+  const cats = mode === "g"
+    ? GROCERIES.map(c => ({ id: c.id, label: c.label, icon: c.icon }))
+    : [{ id: "veg", label: "Vegetables", icon: "🥬" }, { id: "fruit", label: "Fruits", icon: "🍎" }];
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,27,22,0.42)", zIndex: 70, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: C.paper, borderRadius: "26px 26px 0 0", padding: "20px 20px calc(28px + env(safe-area-inset-bottom))" }}>
+        <div style={{ display: "grid", placeItems: "center", marginBottom: 16 }}>
+          <div style={{ width: 42, height: 5, borderRadius: 3, background: C.line }} />
+        </div>
+        <h2 style={{ fontFamily: SERIF, fontSize: 22, margin: "0 0 16px", fontWeight: 500 }}>Add item</h2>
+        <input
+          autoFocus value={name} onChange={(e) => setName(e.target.value)}
+          placeholder={mode === "g" ? "e.g. Oat milk, Protein bar…" : "e.g. Tendli, Raw jackfruit…"}
+          style={{ width: "100%", border: `1px solid ${C.line}`, borderRadius: 12, padding: "13px 14px", fontSize: 15, outline: "none", background: C.surface, color: C.ink, marginBottom: 14 }}
+          onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) onAdd(name, cat); }}
+        />
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.sub, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>Category</div>
+        <div className="noscroll" style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 14 }}>
+          {cats.map(c => (
+            <button key={c.id} onClick={() => setCat(c.id)} style={{
+              whiteSpace: "nowrap", flexShrink: 0, display: "inline-flex", alignItems: "center", gap: 6,
+              fontSize: 13, fontWeight: 600, padding: "8px 14px", borderRadius: 11,
+              border: `1px solid ${cat === c.id ? C.green : C.line}`,
+              background: cat === c.id ? C.greenTint : C.surface,
+              color: cat === c.id ? C.greenDeep : C.sub,
+            }}><span>{c.icon}</span>{c.label}</button>
+          ))}
+        </div>
+        <button
+          onClick={() => { if (name.trim()) onAdd(name, cat); }}
+          style={{ width: "100%", background: name.trim() ? C.green : C.line, color: name.trim() ? "#fff" : C.faint, border: "none", borderRadius: 14, padding: "15px", fontSize: 15.5, fontWeight: 600 }}
+        >Add to list</button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- small UI bits ---------- */
 function Chip({ children, active, onClick, accent }: any) {
   return (
@@ -1183,6 +1266,8 @@ function StyleTag() {
       .sheet { animation: sheetUp .32s cubic-bezier(.22,.9,.3,1); }
       .toast { animation: fadeUp .22s ease; }
       .reveal { animation: revealIn .22s ease; }
+      @keyframes splashBar { from { width: 0%; } to { width: 100%; } }
+      .splash-bar { animation: splashBar 1.2s ease forwards; }
       @media (prefers-reduced-motion: reduce) {
         .sheet, .toast, .reveal { animation: none !important; }
         * { transition: none !important; }
