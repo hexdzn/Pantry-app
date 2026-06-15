@@ -538,7 +538,7 @@ export default function PantryApp() {
       .filter((c) => c.items.length);
   }, [source, chip, q, favs, mode, cad, isCad, cadVal, isDue, dueSet]);
 
-  const selThisMode: [string, any][] = Object.entries(sel).filter(([id]) => ALL_ITEMS[id]?.mode === mode);
+  const selThisMode: [string, any][] = Object.entries(sel).filter(([id]) => ALL_ITEMS[id]?.mode === mode) as [string, any][];
   const count = selThisMode.length;
   const favCount = (mode === "g" ? GROCERIES.flatMap((c) => c.items) : [...VEG, ...FRUITS]).filter((it) => favs[it.id]).length;
 
@@ -560,17 +560,17 @@ export default function PantryApp() {
 
   /* ---- export text ---- */
   const vegMessage = () => {
-    const order = { veg: 0, fruit: 1 };
-    const sorted = [...selThisMode].sort((a, b) => (order[ALL_ITEMS[a[0]].cat] ?? 0) - (order[ALL_ITEMS[b[0]].cat] ?? 0));
-    const lines = sorted.map(([id, v]) => `• ${ALL_ITEMS[id].name} — ${qtyLabel((v as any).qty, (v as any).unit)}`);
+    const order: Record<string, number> = { veg: 0, fruit: 1 };
+    const sorted: [string, any][] = [...selThisMode].sort((a: any, b: any) => (order[ALL_ITEMS[a[0]].cat] ?? 0) - (order[ALL_ITEMS[b[0]].cat] ?? 0));
+    const lines = sorted.map(([id, v]: [string, any]) => `• ${ALL_ITEMS[id].name} — ${qtyLabel((v as any).qty, (v as any).unit)}`);
     const hasFruit = selThisMode.some(([id]) => ALL_ITEMS[id].cat === "fruit");
     const hasVeg = selThisMode.some(([id]) => ALL_ITEMS[id].cat === "veg");
     const head = hasFruit && !hasVeg ? "Aaj ke fruits:" : hasFruit && hasVeg ? "Aaj ki sabzi & fruits:" : "Aaj ki sabzi:";
     return `Namaste 🙏 ${head}\n\n${lines.join("\n")}\n\nDhanyavaad!`;
   };
   const groceryText = () => {
-    const byCat = {};
-    selThisMode.forEach(([id, v]) => {
+    const byCat: Record<string, string[]> = {};
+    selThisMode.forEach(([id, v]: [string, any]) => {
       const it = ALL_ITEMS[id];
       (byCat[it.catLabel] = byCat[it.catLabel] || []).push(`• ${it.name} — ${qtyLabel((v as any).qty, (v as any).unit)}`);
     });
@@ -868,7 +868,7 @@ function Sheet({ mode, items, accent, onClose, onRemove, onStep, onUnit, onClear
 
           {/* Editable items */}
           <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 16, overflow: "hidden", marginBottom: 14 }}>
-            {items.map(([id, v], i) => {
+            {items.map(([id, v]: [string, any], i) => {
               const it = ALL_ITEMS[id];
               const by = members?.find((m) => m.id === v.by);
               return (
