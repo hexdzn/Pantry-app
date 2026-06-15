@@ -538,7 +538,7 @@ export default function PantryApp() {
       .filter((c) => c.items.length);
   }, [source, chip, q, favs, mode, cad, isCad, cadVal, isDue, dueSet]);
 
-  const selThisMode = Object.entries(sel).filter(([id]) => ALL_ITEMS[id]?.mode === mode);
+  const selThisMode: [string, any][] = Object.entries(sel).filter(([id]) => ALL_ITEMS[id]?.mode === mode);
   const count = selThisMode.length;
   const favCount = (mode === "g" ? GROCERIES.flatMap((c) => c.items) : [...VEG, ...FRUITS]).filter((it) => favs[it.id]).length;
 
@@ -880,10 +880,10 @@ function Sheet({ mode, items, accent, onClose, onRemove, onStep, onUnit, onClear
                   </div>
                   <div style={{ display: "flex", alignItems: "center", background: C.paper, border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden" }}>
                     <button onClick={() => onStep(id, -1)} style={stepBtnSm}><Minus size={13} color={C.greenDeep} /></button>
-                    <span style={{ minWidth: 34, textAlign: "center", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmt(v.qty)}</span>
+                    <span style={{ minWidth: 34, textAlign: "center", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmt((v as any).qty)}</span>
                     <button onClick={() => onStep(id, 1)} style={stepBtnSm}><Plus size={13} color={C.greenDeep} /></button>
                   </div>
-                  <button onClick={() => onUnit(id)} style={{ fontSize: 12.5, fontWeight: 600, color: C.greenDeep, background: C.greenTint2, borderRadius: 8, border: `1px solid ${C.bubbleLine}`, padding: "6px 9px", minWidth: 50 }}>{v.unit}</button>
+                  <button onClick={() => onUnit(id)} style={{ fontSize: 12.5, fontWeight: 600, color: C.greenDeep, background: C.greenTint2, borderRadius: 8, border: `1px solid ${C.bubbleLine}`, padding: "6px 9px", minWidth: 50 }}>{(v as any).unit}</button>
                   <button onClick={() => onRemove(id)} aria-label="Remove" style={iconBtn}><Trash2 size={16} color={C.faint} /></button>
                 </div>
               );
