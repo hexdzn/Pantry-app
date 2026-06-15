@@ -572,7 +572,7 @@ export default function PantryApp() {
     const byCat = {};
     selThisMode.forEach(([id, v]) => {
       const it = ALL_ITEMS[id];
-      (byCat[it.catLabel] = byCat[it.catLabel] || []).push(`• ${it.name} — ${qtyLabel(v.qty, v.unit)}`);
+      (byCat[it.catLabel] = byCat[it.catLabel] || []).push(`• ${it.name} — ${qtyLabel((v as any).qty, (v as any).unit)}`);
     });
     const blocks = Object.entries(byCat).map(([cat, rows]) => `${cat}\n${rows.join("\n")}`);
     return `Grocery list · ${count} item${count === 1 ? "" : "s"}\n\n${blocks.join("\n\n")}`;
