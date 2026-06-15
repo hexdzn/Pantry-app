@@ -562,7 +562,7 @@ export default function PantryApp() {
   const vegMessage = () => {
     const order = { veg: 0, fruit: 1 };
     const sorted = [...selThisMode].sort((a, b) => (order[ALL_ITEMS[a[0]].cat] ?? 0) - (order[ALL_ITEMS[b[0]].cat] ?? 0));
-    const lines = sorted.map(([id, v]) => `• ${ALL_ITEMS[id].name} — ${qtyLabel(v.qty, v.unit)}`);
+    const lines = sorted.map(([id, v]) => `• ${ALL_ITEMS[id].name} — ${qtyLabel((v as any).qty, (v as any).unit)}`);
     const hasFruit = selThisMode.some(([id]) => ALL_ITEMS[id].cat === "fruit");
     const hasVeg = selThisMode.some(([id]) => ALL_ITEMS[id].cat === "veg");
     const head = hasFruit && !hasVeg ? "Aaj ke fruits:" : hasFruit && hasVeg ? "Aaj ki sabzi & fruits:" : "Aaj ki sabzi:";
