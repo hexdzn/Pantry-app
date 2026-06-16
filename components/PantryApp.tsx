@@ -243,6 +243,8 @@ export default function PantryApp() {
   const [toast, setToast] = useState<any>(null);
   const saveTimer = useRef<any>(null);
   const snapRef = useRef<any>({});
+  const pendingRef = useRef<Record<string, number>>({}); // item_id -> local write timestamp (suppress echo)
+  const qtyDebounce = useRef<Record<string, any>>({}); // item_id -> debounce timer for qty typing
 
   const rowKey = (r) => JSON.stringify([
     !!r.selected, Number(r.qty), r.unit, !!r.is_favorite, r.cadence || null,
@@ -332,12 +334,15 @@ export default function PantryApp() {
           delete snapRef.current[id];
           return;
         }
+        const pendingAt = pendingRef.current[id];
+        const isOwnRecentWrite = pendingAt && (Date.now() - pendingAt < 4000) && r.updated_by === profile?.id;
+        snapRef.current[id] = rowKey(r);
+        if (isOwnRecentWrite) return; // our own echo — local state is already correct/newer
         setLast((m) => ({ ...m, [id]: { qty: Number(r.qty), unit: r.unit } }));
         setSel((m) => { const n = { ...m }; if (r.selected) n[id] = { qty: Number(r.qty), unit: r.unit, by: r.added_by, initials: r.added_by_initials, ci: r.added_by_ci }; else delete n[id]; return n; });
         setFavs((m) => { const n = { ...m }; if (r.is_favorite) n[id] = true; else delete n[id]; return n; });
         setCad((m) => { const n = { ...m }; if (r.cadence) n[id] = r.cadence; else delete n[id]; return n; });
         setOrdered((m) => { const n = { ...m }; if (r.last_ordered) n[id] = new Date(r.last_ordered).getTime(); else delete n[id]; return n; });
-        snapRef.current[id] = rowKey(r);
       })
       .subscribe();
     return () => { active = false; supabase.removeChannel(ch); };
@@ -372,6 +377,9 @@ export default function PantryApp() {
         if (snapRef.current[id] !== key) { upserts.push(row); nextSnap[id] = key; }
       });
       try {
+        const now = Date.now();
+        upserts.forEach((u: any) => { pendingRef.current[u.item_id] = now; });
+        deletes.forEach((id: string) => { pendingRef.current[id] = now; });
         if (upserts.length) await supabase.from("pantry_items").upsert(upserts);
         if (deletes.length) await supabase.from("pantry_items").delete().eq("household_id", household.id).in("item_id", deletes);
         snapRef.current = nextSnap;
@@ -852,6 +860,7 @@ function Row({ it, state, fav, first, onToggle, onFav, onStep, onSetQty, onUnit,
             <button onPointerDown={(e)=>{e.preventDefault();onStep(-1);}} aria-label="Less" style={stepBtn}><Minus size={15} color={C.greenDeep} /></button>
             <input
               value={state.qty} inputMode="decimal"
+              onFocus={(e) => e.target.select()}
               onChange={(e) => { const v = parseFloat(e.target.value); onSetQty(isNaN(v) ? 0 : v); }}
               style={{ width: 46, textAlign: "center", border: "none", outline: "none", fontSize: 15, fontWeight: 600, background: "transparent", color: C.ink, fontVariantNumeric: "tabular-nums" }}
             />
@@ -1118,7 +1127,7 @@ function AuthGate({ stage, onGoogle, defaultName, onSaveProfile, onCreate, onJoi
           {famMode === "create" && (
             <>
               <label style={{ fontSize: 13, fontWeight: 600, color: C.sub }}>Home name</label>
-              <input autoFocus value={homeName} onChange={(e) => setHomeName(e.target.value)} placeholder="e.g. The Grovers, Home, Family" style={{ ...field, margin: "8px 0 16px" }} />
+              <input autoFocus value={homeName} onChange={(e) => setHomeName(e.target.value)} placeholder="Home name" style={{ ...field, margin: "8px 0 16px" }} />
               <button disabled={busy} onClick={async () => { setBusy(true); await onCreate(homeName); setBusy(false); }} style={{ ...big, background: C.green, color: "#fff", opacity: busy ? 0.6 : 1 }}>{busy ? "Creating…" : "Create & get code"}</button>
               <button onClick={() => setFamMode(null)} style={{ ...big, background: "transparent", color: C.sub, marginTop: 6 }}>Back</button>
             </>
