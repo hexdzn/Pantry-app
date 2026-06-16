@@ -488,6 +488,14 @@ export default function PantryApp() {
     setProfile(null); setHousehold(null); setMembers([]);
     setSel({}); setFavs({}); setCad({}); setOrdered({}); setLast({}); snapRef.current = {};
   };
+  const leaveFamily = async () => {
+    if (!household?.id || !session?.user?.id) return;
+    setFamilyMenu(false);
+    await supabase.from("household_members").delete().eq("household_id", household.id).eq("user_id", session.user.id);
+    setHousehold(null); setMembers([]);
+    setSel({}); setFavs({}); setCad({}); setOrdered({}); setLast({}); snapRef.current = {};
+    ping("Left family — create or join another");
+  };
   const copyInvite = async () => {
     const ok = await copyText(`Join our ${familyName} grocery list 🛒 — open Pantry and enter family code: ${familyCode}`);
     ping(ok ? "Invite copied" : `Family code: ${familyCode}`);
@@ -792,7 +800,7 @@ export default function PantryApp() {
         <FamilyMenu
           familyName={familyName} familyCode={familyCode} members={members} meId={profile?.id}
           onClose={() => setFamilyMenu(false)}
-          onInvite={copyInvite} onSignOut={signOut}
+          onInvite={copyInvite} onSignOut={signOut} onLeave={leaveFamily}
         />
       )}
 
@@ -1130,7 +1138,8 @@ function AuthGate({ stage, onGoogle, defaultName, onSaveProfile, onCreate, onJoi
 }
 
 /* ---------- Family & members menu ---------- */
-function FamilyMenu({ familyName, familyCode, members, meId, onClose, onInvite, onSignOut }: any) {
+function FamilyMenu({ familyName, familyCode, members, meId, onClose, onInvite, onSignOut, onLeave }: any) {
+  const [confirmLeave, setConfirmLeave] = useState(false);
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,27,22,0.42)", zIndex: 70, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "90dvh", background: C.paper, borderRadius: "26px 26px 0 0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -1172,7 +1181,20 @@ function FamilyMenu({ familyName, familyCode, members, meId, onClose, onInvite, 
             {!members.length && <div style={{ padding: 16, fontSize: 13, color: C.faint }}>Just you so far — share the code to add family.</div>}
           </div>
 
-          <button onClick={onSignOut} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: "none", border: `1px solid ${C.line}`, borderRadius: 13, padding: "13px", color: C.danger, fontSize: 14, fontWeight: 600 }}>
+          {!confirmLeave ? (
+            <button onClick={() => setConfirmLeave(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: "none", border: `1px solid ${C.line}`, borderRadius: 13, padding: "13px", color: C.danger, fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
+              <Home size={16} /> Leave this family
+            </button>
+          ) : (
+            <div style={{ background: "#FBEFEC", border: `1px solid ${C.danger}`, borderRadius: 13, padding: 14, marginBottom: 10 }}>
+              <div style={{ fontSize: 13.5, color: C.ink, marginBottom: 10, lineHeight: 1.45 }}>Leave <strong>{familyName}</strong>? You'll be able to create or join a different family right after.</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={onLeave} style={{ flex: 1, background: C.danger, color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontSize: 13.5, fontWeight: 600 }}>Yes, leave</button>
+                <button onClick={() => setConfirmLeave(false)} style={{ flex: 1, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, padding: "10px", fontSize: 13.5, fontWeight: 600, color: C.sub }}>Cancel</button>
+              </div>
+            </div>
+          )}
+          <button onClick={onSignOut} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", background: "none", border: `1px solid ${C.line}`, borderRadius: 13, padding: "13px", color: C.sub, fontSize: 14, fontWeight: 600 }}>
             <LogOut size={16} /> Sign out
           </button>
         </div>
